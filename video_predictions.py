@@ -15,6 +15,9 @@ VIDEO_FILE = os.path.abspath(sys.argv[1])
 VIDEO_DIMENSIONS = (1920,1080)
 VIDEO_FPS = 30
 
+# classes to annotate
+CLASSES = [3,4,6,8]
+
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../")
 
@@ -80,6 +83,10 @@ model.load_weights(COCO_MODEL_PATH, by_name=True)
 OUTPUT_FILE = VIDEO_FILE.replace('.', '_maskRCNN.')
 inputV = cv2.VideoCapture(VIDEO_FILE)
 outputV = cv2.VideoWriter(OUTPUT_FILE, cv2.VideoWriter_fourcc('M','J','P','G'), VIDEO_FPS, VIDEO_DIMENSIONS)
+
+print('Starting...')
+
+boxesArray = []
 while (True):
     ret, frame = inputV.read()
 
@@ -93,13 +100,13 @@ while (True):
     masks = r['masks']
     class_ids = r['class_ids']
     scores = r['scores']
-
     N = boxes.shape[0]
     colors = random_colors(N)
     # masked_image = image.astype(np.uint32).copy()
     masked_image = frame.copy()
+    frameBoxes = []
     for i in range(N):
-        if not class_ids[i] == 1: # 1 for person
+        if not class_ids[i] in CLASSES:
             print("Skipping: {}".format(class_ids[i]))
             print(scores[i])
             continue
@@ -115,20 +122,28 @@ while (True):
             # Skip this instance. Has no bbox. Likely lost in image cropping.
             continue
         y1, x1, y2, x2 = boxes[i]
+        frameBoxes.append((x1,y1,x2,y2))
 
         # Bounding Box
         cv2.rectangle(masked_image, (x1,y1), (x2,y2), cv2_color)
 
         # Label
-        caption = "{} {:.3f}".format("person", scores[i])
-        cv2.putText(masked_image, caption, (x1,y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, cv2_color, 2)
+        # caption = "{} {:.3f}".format("person", scores[i])
+        # cv2.putText(masked_image, caption, (x1,y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, cv2_color, 2)
 
         # Mask
         mask = masks[:, :, i]
         masked_image = apply_mask(masked_image, mask, color)
 
+    boxesArray.append(frameBoxes)
+    del frameBoxes
     masked_image = cv2.cvtColor(masked_image, cv2.COLOR_RGB2BGR)
     outputV.write(masked_image)
 
 inputV.release()
 outputV.release()
+
+pklDest = VIDEO_FILE[:VIDEO_FILE.rfind('.')+1] + pkl
+with open(pklDest, 'w+') as pklFile:
+    pickle.dump(boxesArray, pklFile)
+
